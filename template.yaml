@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  lambda-python3.13
+
+  Sample SAM Template for lambda-python3.13
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Parameters:
+  CloudflareApiTokenParam:
+    Type: String
+    NoEcho: true
+    Description: SSM Parameter path for Cloudflare API Token
+
+  CloudflareZoneIdParam:
+    Type: String
+    NoEcho: true
+    Description: SSM Parameter path for Cloudflare Zone ID
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: hello_world/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          CLOUDFLARE_API_TOKEN: !Ref CloudflareApiTokenParam
+          CLOUDFLARE_ZONE_ID: !Ref CloudflareZoneIdParam
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+                - ssm:GetParameters
+              Resource:
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cloudflare/*'
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /hello
+            Method: get
+
+  # CloudflareのシークレットパラメータをSSMに作成
+  CloudflareApiToken:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /cloudflare/api-token
+      Type: SecureString
+      Value: !Ref CloudflareApiTokenParam
+      Description: Cloudflare API Token
+
+  CloudflareZoneId:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /cloudflare/zone-id
+      Type: SecureString
+      Value: !Ref CloudflareZoneIdParam
+      Description: Cloudflare Zone ID
+  CloudflareRecordName:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /cloudflare/record-name
+      Type: SecureString
+      Value: !Ref CloudflareRecordNameParam
+      Description: Cloudflare Record Name
+
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  HelloWorldApi:
+    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  HelloWorldFunction:
+    Description: "Hello World Lambda Function ARN"
+    Value: !GetAtt HelloWorldFunction.Arn
+  HelloWorldFunctionIamRole:
+    Description: "Implicit IAM Role created for Hello World function"
+    Value: !GetAtt HelloWorldFunctionRole.Arn
