@@ -2,16 +2,41 @@ import os
 import json
 import requests
 import boto3
+from cloudflare import Cloudflare
 
+def response(status_code, message):
+    return {
+        "statusCode": status_code,
+        "body": json.dumps({
+            "message": message
+        }),
+    }
 
 def lambda_handler(event, context):
+    
+    STATUS_CODE_OK = 200
+    STATUS_CODE_ERROR = 500
+    STATUS_CODE = STATUS_CODE_OK
+    MESSAGE = ""
 
+    # ローカル開発時は環境変数から直接取得
     CLOUDFLARE_API = "https://api.cloudflare.com/client/v4/"
 
-    # デバッグ用：環境変数の値を確認
-    print("Environment variables:")
-    print(f"CLOUDFLARE_API_TOKEN: {os.environ.get('CLOUDFLARE_API_TOKEN', 'Not set')}")
-    print(f"CLOUDFLARE_ZONE_ID: {os.environ.get('CLOUDFLARE_ZONE_ID', 'Not set')}")
+    
+     # --- POSTでJSONを受け取り、IPを取得する処理を追加 ---
+    print("DEBUG: event の内容:")
+    print(json.dumps(event, indent=2, ensure_ascii=False))
+    if event.get("body"):
+        try:
+            data = json.loads(event["body"])
+            ip = data.get("ip")
+            if not ip:
+                raise ValueError("JSON内に'ip'が存在しません")
+        except Exception as e:
+            print("JSONパースエラー:", e)
+            return response(STATUS_CODE_ERROR, "JSONパースエラー: " + str(e))
+    else:
+        return response(STATUS_CODE_ERROR, "JSONが存在しません")
 
     
     # ローカル開発時は環境変数から直接取得
@@ -19,62 +44,36 @@ def lambda_handler(event, context):
     if 'CLOUDFLARE_API_TOKEN' in os.environ:
         api_token = os.environ['CLOUDFLARE_API_TOKEN']
         zone_id = os.environ['CLOUDFLARE_ZONE_ID']
+        record_name = os.environ['CLOUDFLARE_RECORD_NAME']
     else:
         ssm = boto3.client('ssm')
-        api_token = ssm.get_parameter(Name='/cloudflare/api-token', WithDecryption=True)['Parameter']['Value']
-        zone_id = ssm.get_parameter(Name='/cloudflare/zone-id', WithDecryption=True)['Parameter']['Value']
+        api_token = ssm.get_parameter(Name='/cloudflare-ddns-awssam/cloudflare-api-token', WithDecryption=True)['Parameter']['Value']
+        zone_id = ssm.get_parameter(Name='/cloudflare-ddns-awssam/cloudflare-zone-id', WithDecryption=True)['Parameter']['Value']
+        record_name = ssm.get_parameter(Name='/cloudflare-ddns-awssam/cloudflare-record-name', WithDecryption=True)['Parameter']['Value']
+    
+    
+    client = Cloudflare(api_token=api_token)
+    records = client.dns.records.list(zone_id=zone_id, name=record_name, type="A").result
 
-    try:
-        record_info = requests.get(
-            f"{CLOUDFLARE_API}/zones/{zone_id}/dns_records",
-            headers={
-                "Authorization": f"Bearer {api_token}",
-                "Content-Type": "application/json"
-            },
-            params={
-                "name": "test.example.com",
-                "type": "A"
-            }
-        )
-        print(record_info.text)
-    except requests.RequestException as e:
-        print(e)
-        raise e
+    if len(records) == 0:
+        MESSAGE = "DNSレコードが見つかりませんでした"
+        STATUS_CODE = STATUS_CODE_ERROR
 
-    """Sample pure Lambda function
+        return response(STATUS_CODE, MESSAGE)
+    
 
-    Parameters
-    ----------
-    event: dict, required
-        API Gateway Lambda Proxy Input Format
+    record = records[0]
+    record_id = record.id
 
-        Event doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-input-format
+   
+    # --- DNSレコード更新 ---
+    client.dns.records.update(zone_id=zone_id, dns_record_id=record_id, content=ip, name=record_name, type='A')
 
-    context: object, required
-        Lambda Context runtime methods and attributes
-
-        Context doc: https://docs.aws.amazon.com/lambda/latest/dg/python-context-object.html
-
-    Returns
-    ------
-    API Gateway Lambda Proxy Output Format: dict
-
-        Return doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
-    """
-
-    try:
-        ip = requests.get("http://checkip.amazonaws.com/")
-        print(ip.text)
-    except requests.RequestException as e:
-        # Send some context about this error to Lambda Logs
-        print(e)
-
-        raise e
-
+    
     return {
-        "statusCode": 200,
+        "statusCode": STATUS_CODE,
         "body": json.dumps({
-            "message": "hello world",
-            # "location": ip.text.replace("\n", "")
+            "message": MESSAGE,
+            "ip": ip
         }),
     }

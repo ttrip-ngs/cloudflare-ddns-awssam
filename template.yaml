@@ -34,6 +34,7 @@ Resources:
         Variables:
           CLOUDFLARE_API_TOKEN: !Ref CloudflareApiTokenParam
           CLOUDFLARE_ZONE_ID: !Ref CloudflareZoneIdParam
+          CLOUDFLARE_RECORD_NAME: !Ref CloudflareRecordNameParam
       Policies:
         - Statement:
             - Effect: Allow
@@ -44,7 +45,7 @@ Resources:
                 - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cloudflare/*'
       Events:
         HelloWorld:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Type: HttpApi
           Properties:
             Path: /hello
             Method: get
@@ -53,7 +54,7 @@ Resources:
   CloudflareApiToken:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /cloudflare/api-token
+      Name: /cloudflare-ddns-awssam/cloudflare-api-token
       Type: SecureString
       Value: !Ref CloudflareApiTokenParam
       Description: Cloudflare API Token
@@ -61,14 +62,14 @@ Resources:
   CloudflareZoneId:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /cloudflare/zone-id
+      Name: /cloudflare-ddns-awssam/cloudflare-zone-id
       Type: SecureString
       Value: !Ref CloudflareZoneIdParam
       Description: Cloudflare Zone ID
   CloudflareRecordName:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /cloudflare/record-name
+      Name: /cloudflare-ddns-awssam/cloudflare-record-name
       Type: SecureString
       Value: !Ref CloudflareRecordNameParam
       Description: Cloudflare Record Name
@@ -79,8 +80,8 @@ Outputs:
   # Find out more about other implicit resources you can reference within SAM
   # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
   HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+    Description: "HTTP API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/hello/"
   HelloWorldFunction:
     Description: "Hello World Lambda Function ARN"
     Value: !GetAtt HelloWorldFunction.Arn
